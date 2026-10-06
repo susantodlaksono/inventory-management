@@ -194,30 +194,27 @@ export function ProductsDirectory() {
         </Link>
       </div>
 
-      <div className="flex flex-col gap-3 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200 md:flex-row md:items-center">
-        <div className="flex flex-1 gap-2">
+      <div className="flex items-center gap-2 rounded-xl bg-white p-3 shadow-sm ring-1 ring-slate-200">
+        <div className="min-w-0 flex-1">
           <SearchInput isSearching={isFetching && filters.search !== ""} />
-          <Button
-            variant="secondary"
-            className="relative md:hidden"
-            onClick={() => dispatch(filterDrawerOpened())}
-            leftIcon={<FilterIcon className="size-4" />}
-          >
-            Filters
-            {activeFilterCount > 0 ? (
-              <span className="grid size-5 place-items-center rounded-full bg-brand-600 text-[10px] font-semibold text-white">
-                {activeFilterCount}
-              </span>
-            ) : null}
-          </Button>
         </div>
-        <div className="hidden items-center gap-2 md:flex">
-          <CategorySelect className="w-48" />
-          <SortSelect className="w-48" />
-        </div>
-        <div className="flex justify-end">
-          <ViewToggle />
-        </div>
+        <Button
+          variant="secondary"
+          className="relative px-3 md:hidden"
+          onClick={() => dispatch(filterDrawerOpened())}
+          leftIcon={<FilterIcon className="size-4" />}
+          aria-label={activeFilterCount > 0 ? `Filters (${activeFilterCount} active)` : "Filters"}
+        >
+          <span className="hidden min-[400px]:inline">Filters</span>
+          {activeFilterCount > 0 ? (
+            <span className="grid size-5 place-items-center rounded-full bg-brand-600 text-[10px] font-semibold text-white">
+              {activeFilterCount}
+            </span>
+          ) : null}
+        </Button>
+        <CategorySelect className="hidden w-48 md:block" />
+        <SortSelect className="hidden w-48 md:block" />
+        <ViewToggle />
       </div>
 
       <ActiveFilterChips />

@@ -19,11 +19,12 @@ const ProductRow = memo(function ProductRow({ product, onEdit, onDelete }: { pro
   const discounted = getDiscountedPrice(product.price, product.discountPercentage);
   return (
     <tr className={cn("group transition-colors hover:bg-slate-50/70", pending && "opacity-70")}>
-      <td className="py-3 pr-3 pl-4 sm:pl-5">
+      {/* w-full + max-w-0 lets the title truncate instead of widening the table. */}
+      <td className="w-full max-w-0 py-3 pr-3 pl-4 sm:pl-5">
         <div className="flex items-center gap-3">
           <ProductThumbnail src={product.thumbnail} alt="" sizes="48px" className="size-12 shrink-0 rounded-lg ring-1 ring-slate-200" />
           <div className="min-w-0">
-            <Link href={`/products/${product.id}`} className="block truncate font-medium text-slate-900 hover:text-brand-700">
+            <Link href={`/products/${product.id}`} className="line-clamp-2 font-medium break-words text-slate-900 hover:text-brand-700 sm:line-clamp-1">
               {product.title}
             </Link>
             <div className="flex items-center gap-2 text-xs text-slate-500">
@@ -73,7 +74,7 @@ const ProductRow = memo(function ProductRow({ product, onEdit, onDelete }: { pro
 
 export function ProductTable({ products, onEdit, onDelete }: { products: Product[] } & ProductActions) {
   return (
-    <div className="overflow-hidden rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
+    <div className="overflow-x-auto rounded-xl bg-white shadow-sm ring-1 ring-slate-200">
       <table className="min-w-full divide-y divide-slate-200">
         <thead className="bg-slate-50">
           <tr className="text-left text-xs font-semibold tracking-wide text-slate-500 uppercase">

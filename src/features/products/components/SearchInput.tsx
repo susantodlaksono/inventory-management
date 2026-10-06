@@ -45,7 +45,7 @@ export function SearchInput({ isSearching = false }: { isSearching?: boolean }) 
         type="search"
         role="searchbox"
         aria-label="Search products"
-        placeholder="Search products…"
+        placeholder="Search…"
         maxLength={MAX_SEARCH_LENGTH}
         value={value}
         onChange={(event) => {
