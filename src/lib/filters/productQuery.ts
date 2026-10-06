@@ -87,18 +87,23 @@ export function getTotalPages(total: number, pageSize: number = PAGE_SIZE): numb
   return Math.max(1, Math.ceil(total / pageSize));
 }
 
-/** Builds a compact page list with ellipses, e.g. [1, "…", 4, 5, 6, "…", 20]. */
+/**
+ * Builds a fixed-width page list with ellipses so the control never jumps around, e.g.
+ * page 1 of 20 → [1, 2, 3, 4, 5, "ellipsis", 20]; page 10 → [1, "ellipsis", 9, 10, 11, "ellipsis", 20].
+ */
 export function getPaginationRange(current: number, totalPages: number, siblings = 1): Array<number | "ellipsis"> {
-  const totalSlots = siblings * 2 + 5;
+  const totalSlots = siblings * 2 + 5; // first, last, current, 2 ellipses + siblings
   if (totalPages <= totalSlots) {
     return Array.from({ length: totalPages }, (_, i) => i + 1);
   }
-  const left = Math.max(current - siblings, 2);
-  const right = Math.min(current + siblings, totalPages - 1);
-  const range: Array<number | "ellipsis"> = [1];
-  if (left > 2) range.push("ellipsis");
-  for (let page = left; page <= right; page += 1) range.push(page);
-  if (right < totalPages - 1) range.push("ellipsis");
-  range.push(totalPages);
-  return range;
+  const range = (from: number, to: number) => Array.from({ length: to - from + 1 }, (_, i) => from + i);
+  const edgeCount = totalSlots - 2; // pages shown next to a single ellipsis
+  const left = Math.max(current - siblings, 1);
+  const right = Math.min(current + siblings, totalPages);
+  const showLeftEllipsis = left > 3;
+  const showRightEllipsis = right < totalPages - 2;
+
+  if (!showLeftEllipsis) return [...range(1, edgeCount), "ellipsis", totalPages];
+  if (!showRightEllipsis) return [1, "ellipsis", ...range(totalPages - edgeCount + 1, totalPages)];
+  return [1, "ellipsis", ...range(left, right), "ellipsis", totalPages];
 }

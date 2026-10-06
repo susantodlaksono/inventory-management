@@ -74,10 +74,13 @@ describe("pagination helpers", () => {
     expect(getPaginationRange(1, 5)).toEqual([1, 2, 3, 4, 5]);
   });
 
-  it("adds ellipses around the current page", () => {
+  it("keeps a constant width with ellipses around the current page", () => {
+    for (let page = 1; page <= 20; page += 1) expect(getPaginationRange(page, 20)).toHaveLength(7);
     expect(getPaginationRange(10, 20)).toEqual([1, "ellipsis", 9, 10, 11, "ellipsis", 20]);
-    expect(getPaginationRange(1, 20)).toEqual([1, 2, "ellipsis", 20]);
-    expect(getPaginationRange(20, 20)).toEqual([1, "ellipsis", 19, 20]);
-    expect(getPaginationRange(3, 20)).toEqual([1, 2, 3, 4, "ellipsis", 20]);
+    expect(getPaginationRange(1, 20)).toEqual([1, 2, 3, 4, 5, "ellipsis", 20]);
+    expect(getPaginationRange(4, 20)).toEqual([1, 2, 3, 4, 5, "ellipsis", 20]);
+    expect(getPaginationRange(5, 20)).toEqual([1, "ellipsis", 4, 5, 6, "ellipsis", 20]);
+    expect(getPaginationRange(17, 20)).toEqual([1, "ellipsis", 16, 17, 18, 19, 20]);
+    expect(getPaginationRange(20, 20)).toEqual([1, "ellipsis", 16, 17, 18, 19, 20]);
   });
 });
