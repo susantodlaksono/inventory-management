@@ -114,7 +114,9 @@ export function ProductWizard() {
   const autosave = useMemo(
     () =>
       debounce(() => {
-        const values = getValues();
+        // getValues() returns React Hook Form's live internal object. Redux freezes
+        // everything it stores, so we must hand it a snapshot, never the original.
+        const values = structuredClone(getValues());
         if (hasMeaningfulContent(values)) dispatch(draftSaved({ values, step: store.getState().draft.step }));
       }, AUTOSAVE_DELAY_MS),
     [dispatch, getValues, store],
@@ -142,7 +144,8 @@ export function ProductWizard() {
 
   const resumeDraft = useCallback(
     (draft: PersistedDraft) => {
-      reset(draft.values);
+      // Give the form its own mutable copy; the draft object ends up frozen in Redux.
+      reset(structuredClone(draft.values));
       dispatch(draftRestored(draft));
       setPendingDraft(null);
     },

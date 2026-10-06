@@ -221,4 +221,31 @@ describe("ProductWizard (integration)", () => {
     expect(store.getState().draft.values?.title).toBe("Autosaved");
     expect(screen.getByText(/draft saved/i)).toBeInTheDocument();
   });
+
+  it("keeps the form editable after an autosave (draft is a copy, not RHF's internal state)", async () => {
+    const user = userEvent.setup();
+    renderWithStore(<ProductWizard />);
+    await fillBasicInfo(user);
+    await next(user);
+    await waitFor(() => expect(stepHeading()).toHaveTextContent("Pricing & variations"));
+    await user.type(screen.getByLabelText(/base price/i), "10");
+    await user.type(screen.getByLabelText(/stock quantity/i), "1");
+    await user.click(screen.getByRole("button", { name: /add variation/i }));
+    await user.click(screen.getByRole("button", { name: /add variation/i }));
+    const rows = screen.getAllByTestId(/variation-row-/);
+    for (const row of rows) {
+      await user.type(within(row).getByLabelText(/color/i), "Red");
+      await user.type(within(row).getByLabelText(/size/i), "M");
+      await user.type(within(row).getByLabelText(/sku code/i), "SKU-RED-1001");
+    }
+    // Let the debounced autosave persist the duplicate state into Redux.
+    await waitFor(() => expect(loadDraft()?.values.variations[1]?.sku).toBe("SKU-RED-1001"));
+
+    await user.clear(within(rows[1]).getByLabelText(/sku code/i));
+    await user.type(within(rows[1]).getByLabelText(/sku code/i), "SKU-RED-1002");
+    await next(user);
+
+    await waitFor(() => expect(stepHeading()).toHaveTextContent("Shipping"));
+    await waitFor(() => expect(loadDraft()?.values.variations[1]?.sku).toBe("SKU-RED-1002"));
+  });
 });
