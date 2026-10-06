@@ -1,10 +1,16 @@
-import { createSlice, type PayloadAction } from "@reduxjs/toolkit";
+import { createSelector, createSlice, type PayloadAction } from "@reduxjs/toolkit";
 import { filtersEqual, isSortOption, normalizeSearch } from "@/lib/filters/urlState";
 import { DEFAULT_FILTERS, type ProductFilters, type SortOption } from "@/lib/filters/types";
 
-export type FiltersState = ProductFilters;
+export interface FiltersState extends ProductFilters {
+  /**
+   * True once the mounted directory has copied the URL into Redux. Reset on unmount so a
+   * later visit never pushes stale filters into the URL before reading it.
+   */
+  isHydrated: boolean;
+}
 
-const initialState: FiltersState = { ...DEFAULT_FILTERS };
+const initialState: FiltersState = { ...DEFAULT_FILTERS, isHydrated: false };
 
 const filtersSlice = createSlice({
   name: "filters",
@@ -32,15 +38,30 @@ const filtersSlice = createSlice({
     },
     /** Replaces the whole filter state, e.g. when hydrating from the URL on load / back navigation. */
     filtersHydrated(state, action: PayloadAction<ProductFilters>) {
-      if (filtersEqual(state, action.payload)) return state;
-      return { ...action.payload };
+      state.isHydrated = true;
+      if (filtersEqual(state, action.payload)) return;
+      const { search, category, sort, page } = action.payload;
+      Object.assign(state, { search, category, sort, page });
     },
-    filtersReset() {
-      return { ...DEFAULT_FILTERS };
+    urlSyncStopped(state) {
+      state.isHydrated = false;
+    },
+    filtersReset(state) {
+      Object.assign(state, DEFAULT_FILTERS);
     },
   },
   selectors: {
-    selectFilters: (state) => state,
+    /** Memoised plain filter object: this exact shape is the RTK Query cache key. */
+    selectFilters: createSelector(
+      [
+        (state: FiltersState) => state.search,
+        (state: FiltersState) => state.category,
+        (state: FiltersState) => state.sort,
+        (state: FiltersState) => state.page,
+      ],
+      (search, category, sort, page): ProductFilters => ({ search, category, sort, page }),
+    ),
+    selectIsHydrated: (state) => state.isHydrated,
     selectSearch: (state) => state.search,
     selectCategory: (state) => state.category,
     selectSort: (state) => state.sort,
@@ -50,8 +71,8 @@ const filtersSlice = createSlice({
   },
 });
 
-export const { searchChanged, categoryChanged, sortChanged, pageChanged, filtersHydrated, filtersReset } =
+export const { searchChanged, categoryChanged, sortChanged, pageChanged, filtersHydrated, urlSyncStopped, filtersReset } =
   filtersSlice.actions;
-export const { selectFilters, selectSearch, selectCategory, selectSort, selectPage, selectActiveFilterCount } =
+export const { selectFilters, selectIsHydrated, selectSearch, selectCategory, selectSort, selectPage, selectActiveFilterCount } =
   filtersSlice.selectors;
 export default filtersSlice;
