@@ -2,13 +2,14 @@ import type { ComponentProps, ReactNode } from "react";
 import { cn } from "@/lib/utils/format";
 
 const controlBase =
-  "block w-full rounded-lg border-0 bg-white text-sm text-slate-900 shadow-sm ring-1 ring-inset placeholder:text-slate-400 " +
-  "focus:ring-2 focus:ring-inset focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500";
+  "block w-full rounded-lg border-0 bg-slate-50 text-sm text-slate-900 ring-1 ring-inset placeholder:text-slate-400 " +
+  "transition-[background-color,box-shadow] duration-150 motion-reduce:transition-none " +
+  "focus:bg-white focus:ring-1 focus:ring-inset focus:outline-none disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-slate-500";
 
 export function controlClass(invalid: boolean, extra?: string): string {
   return cn(
     controlBase,
-    invalid ? "ring-rose-400 focus:ring-rose-500" : "ring-slate-300 focus:ring-brand-600",
+    invalid ? "ring-rose-400 focus:ring-rose-500" : "ring-brand-600/30 hover:ring-brand-600/50 focus:ring-brand-600",
     extra,
   );
 }
@@ -109,7 +110,7 @@ export function Checkbox({ label, description, invalid = false, id, className, .
           type="checkbox"
           aria-invalid={invalid || undefined}
           className={cn(
-            "size-4 rounded border-slate-300 accent-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
+            "size-4 rounded border-brand-600/30 accent-brand-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-600",
             invalid && "outline-1 outline-rose-500",
           )}
           {...props}

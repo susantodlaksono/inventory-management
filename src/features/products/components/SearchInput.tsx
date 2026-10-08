@@ -7,6 +7,7 @@ import { MAX_SEARCH_LENGTH } from "@/lib/filters/types";
 import { debounce } from "@/lib/utils/debounce";
 import { CloseIcon, SearchIcon } from "@/components/ui/Icons";
 import { Spinner } from "@/components/ui/Spinner";
+import { controlClass } from "@/components/form/fields";
 import { useAppDispatch, useAppSelector } from "@/store/hooks";
 
 export const SEARCH_DEBOUNCE_MS = 300;
@@ -60,7 +61,7 @@ export function SearchInput({ isSearching = false }: { isSearching?: boolean }) 
             dispatch(searchChanged(""));
           }
         }}
-        className="h-10 w-full rounded-lg border-0 bg-white pr-16 pl-9 text-sm shadow-sm ring-1 ring-slate-300 ring-inset placeholder:text-slate-400 focus:ring-2 focus:ring-brand-600 focus:outline-none [&::-webkit-search-cancel-button]:appearance-none"
+        className={controlClass(false, "h-10 pr-16 pl-9 [&::-webkit-search-cancel-button]:appearance-none")}
       />
       <div className="absolute inset-y-0 right-2 flex items-center gap-1">
         {isSearching ? <Spinner className="size-3.5 text-slate-400" /> : null}

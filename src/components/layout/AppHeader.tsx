@@ -15,10 +15,7 @@ export function AppHeader() {
     <header className="sticky top-0 z-30 border-b border-slate-200 bg-white/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-7xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
         <Link href="/products" className="flex items-center gap-2 font-semibold tracking-tight text-slate-900">
-          <span aria-hidden className="grid size-7 place-items-center rounded-lg bg-brand-600 text-sm text-white">
-            S
-          </span>
-          Stockroom
+          Inventory Management
         </Link>
         <nav aria-label="Main" className="flex items-center gap-1">
           {NAV_ITEMS.map((item) => {
