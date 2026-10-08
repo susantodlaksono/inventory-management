@@ -1,6 +1,6 @@
 # Inventory Management
 
-Live Vercel URL :
+Live Vercel URL : https://inventory-management-ecru-two.vercel.app
 GitHub Repository URL : https://github.com/susantodlaksono/inventory-management
 
 ## Screenshots
