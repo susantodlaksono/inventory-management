@@ -128,7 +128,8 @@ describe("optimisticSlice bookkeeping", () => {
     await fast;
     expect(selectOptimisticEntry(store.getState(), 4)).toBeUndefined();
     await slow;
-    // The late failure belongs to a superseded request and must not flag the product.
+    // A late failure must preserve both the cache and the newer request status.
+    expect(listOf(store)?.products.find((p) => p.id === 4)?.stock).toBe(9);
     expect(selectOptimisticEntry(store.getState(), 4)).toBeUndefined();
   });
 
@@ -137,5 +138,128 @@ describe("optimisticSlice bookkeeping", () => {
       entries: { 7: { productId: 7, kind: "delete" as const, status: "rolledBack" as const, requestId: "r1" } },
     };
     expect(optimisticSlice.reducer(state, rollbackAcknowledged(7)).entries).toEqual({});
+  });
+});
+
+function gate() {
+  let release = () => {};
+  const promise = new Promise<void>((resolve) => { release = resolve; });
+  return { promise, release };
+}
+
+const completionCases = [true, false].flatMap((firstSucceeds) =>
+  [true, false].flatMap((secondSucceeds) =>
+    [true, false].map((firstFinishesFirst) => ({ firstSucceeds, secondSucceeds, firstFinishesFirst })),
+  ),
+);
+
+describe("overlapping cache mutations", () => {
+  it.each(completionCases)(
+    "preserves updates: $firstSucceeds / $secondSucceeds, first finishes first: $firstFinishesFirst",
+    async ({ firstSucceeds, secondSucceeds, firstFinishesFirst }) => {
+      const gates = [gate(), gate()];
+      server.use(http.put(`${API}/products/:id`, async ({ request }) => {
+        const body = await request.json() as { stock: number };
+        const index = body.stock === 8 ? 0 : 1;
+        await gates[index].promise;
+        const succeeds = index === 0 ? firstSucceeds : secondSucceeds;
+        return succeeds
+          ? HttpResponse.json({ id: 1, title: "iPhone 15", stock: body.stock })
+          : HttpResponse.json({ message: "Failed" }, { status: 500 });
+      }));
+      const store = await storeWithCachedList();
+      const categoryArgs = { ...DEFAULT_FILTERS, category: "smartphones" };
+      await store.dispatch(productsApi.endpoints.getProducts.initiate(categoryArgs));
+      const requests = [8, 9].map((stock) =>
+        store.dispatch(productsApi.endpoints.updateProduct.initiate({ id: 1, changes: { stock } })),
+      );
+      const expectStock = (stock: number) => {
+        expect(listOf(store)?.products.find((p) => p.id === 1)?.stock).toBe(stock);
+        expect(detailOf(store, 1)?.stock).toBe(stock);
+        expect(productsApi.endpoints.getProducts.select(categoryArgs)(store.getState()).data?.products[0].stock).toBe(stock);
+      };
+      expectStock(9);
+      const firstIndex = firstFinishesFirst ? 0 : 1;
+      gates[firstIndex].release();
+      await requests[firstIndex];
+      expectStock(firstFinishesFirst || secondSucceeds ? 9 : 8);
+      gates[1 - firstIndex].release();
+      await requests[1 - firstIndex];
+      const expected = secondSucceeds ? 9 : firstSucceeds ? 8 : 25;
+      expectStock(expected);
+
+      // A fresh failed mutation must roll back to the committed result, proving
+      // the previous journal was cleaned up after all overlapping writes settled.
+      failureSimulation.rate = 1;
+      await store.dispatch(productsApi.endpoints.updateProduct.initiate({ id: 1, changes: { stock: 100 } }));
+      expectStock(expected);
+    },
+  );
+
+  it.each(completionCases)(
+    "preserves deletions and totals: $firstSucceeds / $secondSucceeds, first finishes first: $firstFinishesFirst",
+    async ({ firstSucceeds, secondSucceeds, firstFinishesFirst }) => {
+      const gates = [gate(), gate()];
+      server.use(http.delete(`${API}/products/:id`, async ({ params }) => {
+        const id = Number(params.id);
+        await gates[id - 1].promise;
+        const succeeds = id === 1 ? firstSucceeds : secondSucceeds;
+        return succeeds
+          ? HttpResponse.json({ id, title: `Product ${id}`, isDeleted: true })
+          : HttpResponse.json({ message: "Failed" }, { status: 500 });
+      }));
+      const store = await storeWithCachedList();
+      const requests = [1, 2].map((id) => store.dispatch(productsApi.endpoints.deleteProduct.initiate(id)));
+      expect(listOf(store)?.products.map((p) => p.id)).toEqual([3, 4, 5, 6]);
+      expect(listOf(store)?.total).toBe(4);
+      const firstIndex = firstFinishesFirst ? 0 : 1;
+      gates[firstIndex].release();
+      await requests[firstIndex];
+      gates[1 - firstIndex].release();
+      await requests[1 - firstIndex];
+      const expectedIds = [1, 2, 3, 4, 5, 6].filter((id) =>
+        !(id === 1 && firstSucceeds) && !(id === 2 && secondSucceeds),
+      );
+      expect(listOf(store)?.products.map((p) => p.id)).toEqual(expectedIds);
+      expect(listOf(store)?.total).toBe(expectedIds.length);
+    },
+  );
+
+  it("restores an updated product when its overlapping deletion fails", async () => {
+    const deletion = gate();
+    server.use(http.delete(`${API}/products/:id`, async () => {
+      await deletion.promise;
+      return HttpResponse.json({ message: "Failed" }, { status: 500 });
+    }));
+    const store = await storeWithCachedList();
+    const update = store.dispatch(productsApi.endpoints.updateProduct.initiate({ id: 1, changes: { stock: 8 } }));
+    const remove = store.dispatch(productsApi.endpoints.deleteProduct.initiate(1));
+    expect(listOf(store)?.products.some((p) => p.id === 1)).toBe(false);
+    await update;
+    deletion.release();
+    await remove;
+    expect(listOf(store)?.products.find((p) => p.id === 1)?.stock).toBe(8);
+    expect(detailOf(store, 1)?.stock).toBe(8);
+    expect(listOf(store)?.total).toBe(6);
+  });
+
+  it("keeps independent stores isolated", async () => {
+    const failed = gate();
+    server.use(http.put(`${API}/products/:id`, async ({ request }) => {
+      const body = await request.json() as { stock: number };
+      if (body.stock === 8) {
+        await failed.promise;
+        return HttpResponse.json({ message: "Failed" }, { status: 500 });
+      }
+      return HttpResponse.json({ id: 1, title: "iPhone 15", stock: body.stock });
+    }));
+    const firstStore = await storeWithCachedList();
+    const secondStore = await storeWithCachedList();
+    const first = firstStore.dispatch(productsApi.endpoints.updateProduct.initiate({ id: 1, changes: { stock: 8 } }));
+    await secondStore.dispatch(productsApi.endpoints.updateProduct.initiate({ id: 1, changes: { stock: 9 } }));
+    failed.release();
+    await first;
+    expect(listOf(firstStore)?.products[0].stock).toBe(25);
+    expect(listOf(secondStore)?.products[0].stock).toBe(9);
   });
 });

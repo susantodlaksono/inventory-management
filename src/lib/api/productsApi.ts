@@ -1,10 +1,11 @@
 import { createApi } from "@reduxjs/toolkit/query/react";
-import type { Draft } from "@reduxjs/toolkit";
-import type { FetchBaseQueryError } from "@reduxjs/toolkit/query";
+import type { BaseQueryApi, FetchBaseQueryError } from "@reduxjs/toolkit/query";
 import { applyClientSidePaging, buildProductsRequest } from "@/lib/filters/productQuery";
 import type { ProductFilters } from "@/lib/filters/types";
 import { baseQueryWithFailureSimulation } from "./baseQuery";
 import { isCategory, isProduct, isProductsResponse } from "./guards";
+import { beginOptimisticChange, type ProductChange } from "./optimisticJournal";
+import { serializeFilters } from "@/lib/filters/urlState";
 import type {
   Category,
   CreatedProduct,
@@ -60,38 +61,17 @@ export const productsApi = createApi({
       query: (body) => ({ url: "/products/add", method: "POST", body }),
     }),
 
-    /**
-     * Optimistic update: patch every cached list + detail entry immediately and undo
-     * the patches if the request fails. DummyJSON does not persist writes, so we do not
-     * invalidate on success (a refetch would revert to the server's original data).
-     */
+    // DummyJSON does not persist writes: preserve successful client changes
+    // without refetching the unchanged server data.
     updateProduct: build.mutation<Product, UpdateProductArg>({
       query: ({ id, changes }) => ({ url: `/products/${id}`, method: "PUT", body: changes }),
       async onQueryStarted({ id, changes }, { dispatch, getState, queryFulfilled }) {
-        const applyChanges = (product: Draft<Product>) => {
-          Object.assign(product, changes);
-        };
-        const patches = productsApi.util
-          .selectCachedArgsForQuery(getState(), "getProducts")
-          .map((args) =>
-            dispatch(
-              productsApi.util.updateQueryData("getProducts", args, (draft) => {
-                const product = draft.products.find((item) => item.id === id);
-                if (product) applyChanges(product);
-              }),
-            ),
-          );
-        patches.push(
-          dispatch(
-            productsApi.util.updateQueryData("getProduct", id, (draft) => {
-              applyChanges(draft);
-            }),
-          ),
-        );
+        const settle = beginProductChange({ kind: "update", id, changes }, { dispatch, getState });
         try {
           await queryFulfilled;
+          settle(true);
         } catch {
-          patches.forEach((patch) => patch.undo());
+          settle(false);
         }
       },
     }),
@@ -99,28 +79,57 @@ export const productsApi = createApi({
     deleteProduct: build.mutation<DeleteProductResponse, number>({
       query: (id) => ({ url: `/products/${id}`, method: "DELETE" }),
       async onQueryStarted(id, { dispatch, getState, queryFulfilled }) {
-        const patches = productsApi.util
-          .selectCachedArgsForQuery(getState(), "getProducts")
-          .map((args) =>
-            dispatch(
-              productsApi.util.updateQueryData("getProducts", args, (draft) => {
-                const index = draft.products.findIndex((item) => item.id === id);
-                if (index !== -1) {
-                  draft.products.splice(index, 1);
-                  draft.total = Math.max(0, draft.total - 1);
-                }
-              }),
-            ),
-          );
+        const settle = beginProductChange({ kind: "delete", id }, { dispatch, getState });
         try {
           await queryFulfilled;
+          settle(true);
         } catch {
-          patches.forEach((patch) => patch.undo());
+          settle(false);
         }
       },
     }),
   }),
 });
+
+function beginProductChange(change: ProductChange, { dispatch, getState }: Pick<BaseQueryApi, "dispatch" | "getState">) {
+  // BaseQueryApi exposes unknown state; these callbacks run in the store that
+  // installs this API reducer and middleware.
+  const state = getState() as { productsApi: ReturnType<typeof productsApi.reducer> };
+  const settlements: Array<(succeeded: boolean) => void> = [];
+  for (const args of productsApi.util.selectCachedArgsForQuery(state, "getProducts")) {
+    const snapshot = productsApi.endpoints.getProducts.select(args)(state).data;
+    if (!snapshot) continue;
+    settlements.push(beginOptimisticChange(getState, `list:${serializeFilters(args)}`, change, (changes) => {
+      dispatch(productsApi.util.updateQueryData("getProducts", args, (draft) => {
+        draft.products = snapshot.products.map((product) => ({ ...product }));
+        draft.total = snapshot.total;
+        for (const operation of changes) {
+          const index = draft.products.findIndex((product) => product.id === operation.id);
+          if (index === -1) continue;
+          if (operation.kind === "update") Object.assign(draft.products[index], operation.changes);
+          else {
+            draft.products.splice(index, 1);
+            draft.total = Math.max(0, draft.total - 1);
+          }
+        }
+      }));
+    }));
+  }
+  if (change.kind === "update") {
+    const snapshot = productsApi.endpoints.getProduct.select(change.id)(state).data;
+    if (snapshot) {
+      settlements.push(beginOptimisticChange(getState, `detail:${change.id}`, change, (changes) => {
+        dispatch(productsApi.util.updateQueryData("getProduct", change.id, (draft) => {
+          Object.assign(draft, snapshot);
+          for (const operation of changes) {
+            if (operation.kind === "update") Object.assign(draft, operation.changes);
+          }
+        }));
+      }));
+    }
+  }
+  return (succeeded: boolean) => settlements.forEach((settle) => settle(succeeded));
+}
 
 export const {
   useGetProductsQuery,
